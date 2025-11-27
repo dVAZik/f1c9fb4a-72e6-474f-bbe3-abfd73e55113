@@ -95,29 +95,44 @@
             const pathParts = window.location.pathname.split('/');
             lobbyId = pathParts[pathParts.length - 1];
             
+            console.log('Initializing lobby:', lobbyId);
+            
             // Подписываемся на события лобби
             socketManager.on('connect', function() {
-                console.log('Connected to lobby');
+                console.log('Connected to lobby server');
                 joinLobby();
                 updateCurrentTime();
                 setInterval(updateCurrentTime, 60000);
             });
             
+            socketManager.on('join_success', function(data) {
+                console.log('Join success in lobby:', data);
+                if (data.success) {
+                    showNotification('Успешно присоединились к лобби!', 'success');
+                } else {
+                    showNotification(data.error || 'Ошибка присоединения', 'error');
+                }
+            });
+            
             socketManager.on('lobby_updated', function(data) {
+                console.log('Lobby updated:', data);
                 updateLobbyInfo(data.lobby);
             });
             
             socketManager.on('player_joined', function(data) {
+                console.log('Player joined:', data);
                 showNotification(`Игрок ${data.player_name} присоединился`, 'success');
                 updateLobbyInfo(data.lobby);
             });
             
             socketManager.on('player_left', function(data) {
+                console.log('Player left:', data);
                 showNotification(`Игрок вышел из лобби`, 'info');
                 updateLobbyInfo(data.lobby);
             });
             
             socketManager.on('game_started', function(data) {
+                console.log('Game started:', data);
                 showNotification('Игра начинается!', 'success');
                 setTimeout(() => {
                     window.location.href = `/game/${data.game_id}`;
@@ -125,18 +140,21 @@
             });
             
             socketManager.on('chat_message', function(data) {
+                console.log('Chat message:', data);
                 addChatMessage(data.player, data.message, data.timestamp);
             });
             
             socketManager.on('error', function(data) {
+                console.error('Lobby error:', data);
                 showNotification(data.message, 'error');
             });
             
             // Подключаемся к серверу
             socketManager.connect();
         }
-        
+
         function joinLobby() {
+            console.log('Joining lobby:', lobbyId);
             socketManager.joinLobby(lobbyId);
         }
         
