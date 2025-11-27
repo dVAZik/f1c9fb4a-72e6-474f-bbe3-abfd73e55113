@@ -373,7 +373,11 @@ class LobbyManager:
         self.players_in_lobbies: Dict[str, str] = {}
     
     def create_lobby(self, creator_sid: str, settings: Dict) -> str:
-        lobby_id = f"lobby_{random.randint(1000, 9999)}"
+        # Генерируем уникальный ID лобби
+        while True:
+            lobby_id = f"lobby_{random.randint(1000, 9999)}"
+            if lobby_id not in self.lobbies:
+                break
         
         lobby = {
             'lobby_id': lobby_id,
@@ -381,11 +385,11 @@ class LobbyManager:
             'settings': {
                 'name': settings.get('name', 'Моя игра'),
                 'gameType': settings.get('gameType', 'throw'),
-                'maxPlayers': settings.get('maxPlayers', 4),
-                'minPlayers': settings.get('minPlayers', 2),
+                'maxPlayers': int(settings.get('maxPlayers', 4)),
+                'minPlayers': int(settings.get('minPlayers', 2)),
                 'botDifficulty': settings.get('botDifficulty', 'medium'),
-                'isPublic': settings.get('isPublic', True),
-                'enableChat': settings.get('enableChat', True)
+                'isPublic': bool(settings.get('isPublic', True)),
+                'enableChat': bool(settings.get('enableChat', True))
             },
             'players': [creator_sid],
             'created_at': datetime.now(),
@@ -395,27 +399,40 @@ class LobbyManager:
         self.lobbies[lobby_id] = lobby
         self.players_in_lobbies[creator_sid] = lobby_id
         
+        print(f"Lobby created: {lobby_id} with {len(lobby['players'])} players")
         return lobby_id
     
     def join_lobby(self, player_sid: str, lobby_id: str) -> bool:
         if lobby_id not in self.lobbies:
+            print(f"Lobby {lobby_id} not found in lobbies: {list(self.lobbies.keys())}")
             return False
         
         lobby = self.lobbies[lobby_id]
         
-        if len(lobby['players']) >= lobby['settings']['maxPlayers']:
+        # Проверяем максимальное количество игроков
+        max_players = lobby['settings']['maxPlayers']
+        current_players = len(lobby['players'])
+        
+        print(f"Lobby {lobby_id}: {current_players}/{max_players} players")
+        
+        if current_players >= max_players:
+            print(f"Lobby {lobby_id} is full")
             return False
         
+        # Если игрок уже в лобби, возвращаем True
         if player_sid in lobby['players']:
             return True
         
+        # Удаляем игрока из предыдущего лобби если есть
         if player_sid in self.players_in_lobbies:
             old_lobby_id = self.players_in_lobbies[player_sid]
             self.leave_lobby(player_sid, old_lobby_id)
         
+        # Добавляем игрока в лобби
         lobby['players'].append(player_sid)
         self.players_in_lobbies[player_sid] = lobby_id
         
+        print(f"Player {player_sid} added to lobby {lobby_id}. Now {len(lobby['players'])} players")
         return True
     
     def leave_lobby(self, player_sid: str, lobby_id: str) -> bool:
@@ -430,24 +447,38 @@ class LobbyManager:
             if player_sid in self.players_in_lobbies:
                 del self.players_in_lobbies[player_sid]
             
+            # Если лобби пустое, удаляем его
             if not lobby['players']:
                 del self.lobbies[lobby_id]
+                print(f"Lobby {lobby_id} deleted (empty)")
+            # Если создатель вышел, назначаем нового
             elif lobby['creator_sid'] == player_sid and lobby['players']:
                 lobby['creator_sid'] = lobby['players'][0]
+                print(f"New creator for lobby {lobby_id}: {lobby['creator_sid']}")
             
+            print(f"Player {player_sid} left lobby {lobby_id}. Remaining: {len(lobby['players'])}")
             return True
         
         return False
     
     def get_lobby(self, lobby_id: str) -> Optional[Dict]:
-        return self.lobbies.get(lobby_id)
+        lobby = self.lobbies.get(lobby_id)
+        if lobby:
+            # Возвращаем копию, чтобы избежать изменений извне
+            return lobby.copy()
+        return None
     
     def get_player_lobby(self, player_sid: str) -> Optional[str]:
         return self.players_in_lobbies.get(player_sid)
     
     def get_public_lobbies(self) -> List[Dict]:
-        return [lobby for lobby in self.lobbies.values() 
-                if lobby['settings']['isPublic'] and not lobby['game_id']]
+        public_lobbies = []
+        for lobby in self.lobbies.values():
+            if lobby['settings']['isPublic'] and not lobby['game_id']:
+                # Возвращаем копию без чувствительной информации
+                lobby_copy = lobby.copy()
+                public_lobbies.append(lobby_copy)
+        return public_lobbies
     
     def set_game_id(self, lobby_id: str, game_id: str) -> bool:
         if lobby_id in self.lobbies:
@@ -480,9 +511,13 @@ def handle_disconnect():
 def handle_create_lobby(data):
     try:
         settings = data.get('settings', {})
+        print(f"Creating lobby with settings: {settings}")
+        
         lobby_id = lobby_manager.create_lobby(request.sid, settings)
         
         join_room(lobby_id)
+        
+        print(f"Lobby created successfully: {lobby_id}")
         
         emit('lobby_created', {
             'success': True,
@@ -497,6 +532,8 @@ def handle_create_lobby(data):
         
     except Exception as e:
         print(f"Error creating lobby: {e}")
+        import traceback
+        traceback.print_exc()
         emit('lobby_created', {
             'success': False,
             'error': 'Не удалось создать лобби'
@@ -508,6 +545,8 @@ def handle_join_lobby(data):
         lobby_id = data.get('lobby_id')
         player_sid = request.sid
         
+        print(f"Player {player_sid} trying to join lobby {lobby_id}")
+        
         if not lobby_id:
             emit('join_success', {
                 'success': False,
@@ -515,12 +554,25 @@ def handle_join_lobby(data):
             })
             return
         
+        lobby = lobby_manager.get_lobby(lobby_id)
+        if not lobby:
+            print(f"Lobby {lobby_id} not found")
+            emit('join_success', {
+                'success': False,
+                'error': 'Лобби не найдено'
+            })
+            return
+        
         if lobby_manager.join_lobby(player_sid, lobby_id):
             join_room(lobby_id)
             lobby = lobby_manager.get_lobby(lobby_id)
             
-            emit('lobby_joined', {
+            print(f"Player {player_sid} successfully joined lobby {lobby_id}")
+            
+            emit('join_success', {
+                'success': True,
                 'lobby_id': lobby_id,
+                'redirect_url': f'/lobby/{lobby_id}',
                 'lobby': lobby
             })
             
@@ -530,22 +582,23 @@ def handle_join_lobby(data):
                 'lobby': lobby
             }, room=lobby_id)
             
-            emit('join_success', {
-                'success': True,
-                'lobby_id': lobby_id,
-                'redirect_url': f'/lobby/{lobby_id}'
-            })
+            emit('lobby_updated', {
+                'lobby': lobby
+            }, room=lobby_id)
         else:
+            print(f"Failed to join lobby {lobby_id} - may be full")
             emit('join_success', {
                 'success': False,
-                'error': 'Не удалось присоединиться к лобби'
+                'error': 'Не удалось присоединиться к лобби (возможно, лобби заполнено)'
             })
             
     except Exception as e:
         print(f"Error joining lobby: {e}")
+        import traceback
+        traceback.print_exc()
         emit('join_success', {
             'success': False,
-            'error': 'Ошибка при присоединении к лобби'
+            'error': f'Ошибка при присоединении к лобби: {str(e)}'
         })
 
 @socketio.on('start_game')
