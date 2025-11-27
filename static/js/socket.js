@@ -113,6 +113,10 @@ class SocketManager {
             game_id: gameId
         });
     }
+    
+    getSocketId() {
+        return this.socket ? this.socket.id : null;
+    }
 }
 
 // Глобальный экземпляр менеджера сокетов
