@@ -12,10 +12,12 @@ function initSocket() {
     
     socket.on('connect', function() {
         console.log('Connected to game');
+        myPlayerId = socket.id;
         loadGameState(gameId);
     });
     
     socket.on('game_update', function(data) {
+        console.log('Game update received:', data);
         gameState = data.game;
         updateGameUI();
     });
@@ -41,7 +43,7 @@ function initSocket() {
     });
     
     socket.on('game_over', function(data) {
-        showNotification(`Игра окончена! Победитель: ${data.winner}`);
+        showNotification(`Игра окончена! Победитель: ${data.winner}`, 'success');
         setTimeout(() => {
             window.location.href = '/';
         }, 5000);
@@ -54,10 +56,14 @@ function initSocket() {
 
 function loadGameState(gameId) {
     fetch(`/api/game/${gameId}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Game not found');
+            }
+            return response.json();
+        })
         .then(data => {
             gameState = data;
-            myPlayerId = socket.id;
             updateGameUI();
         })
         .catch(error => {
