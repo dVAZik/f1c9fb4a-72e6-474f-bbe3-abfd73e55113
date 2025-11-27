@@ -92,6 +92,19 @@
             margin-right: 15px;
             flex-shrink: 0;
         }
+        
+        .lobby-status {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+        }
+        
+        .players-count {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--text-accent);
+        }
     </style>
 </head>
 <body class="background-lobby background-pattern">
@@ -108,6 +121,11 @@
                 
                 <div class="link-url" id="gameLink">
                     Загрузка...
+                </div>
+                
+                <div class="lobby-status">
+                    <div>Игроков в лобби: <span class="players-count" id="playersCount">0</span></div>
+                    <div>Статус: <span id="lobbyStatusText">Загрузка...</span></div>
                 </div>
                 
                 <div>
@@ -169,6 +187,7 @@
     <script>
         let lobbyId = null;
         let socket = null;
+        let currentLobby = null;
         
         function initPage() {
             // Получаем ID лобби из URL
@@ -180,6 +199,8 @@
                 return;
             }
             
+            console.log('Link game page for lobby:', lobbyId);
+            
             // Загружаем информацию о лобби
             loadLobbyInfo();
             
@@ -190,12 +211,78 @@
             updateGameLink();
         }
         
+        function initSocket() {
+            socket = io({
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000
+            });
+            
+            socket.on('connect', function() {
+                console.log('Connected to server from link page, socket ID:', socket.id);
+                // Автоматически присоединяемся к лобби
+                socket.emit('join_lobby', { lobby_id: lobbyId });
+            });
+            
+            socket.on('disconnect', function(reason) {
+                console.log('Disconnected from server:', reason);
+                showNotification('Отключено от сервера', 'error');
+            });
+            
+            socket.on('reconnect', function(attemptNumber) {
+                console.log('Reconnected to server after', attemptNumber, 'attempts');
+                // Переприсоединяемся к лобби после переподключения
+                socket.emit('join_lobby', { lobby_id: lobbyId });
+            });
+            
+            socket.on('lobby_updated', function(data) {
+                console.log('Lobby updated:', data);
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socket.on('game_started', function(data) {
+                console.log('Game started:', data);
+                showNotification('Игра начинается!', 'success');
+                setTimeout(() => {
+                    window.location.href = `/game/${data.game_id}`;
+                }, 2000);
+            });
+            
+            socket.on('join_success', function(data) {
+                console.log('Join success in link page:', data);
+                if (data.success) {
+                    showNotification('Успешно присоединились к лобби!', 'success');
+                    updateLobbyInfo(data.lobby);
+                } else {
+                    showNotification(data.error || 'Ошибка присоединения', 'error');
+                }
+            });
+            
+            socket.on('player_joined', function(data) {
+                console.log('Player joined:', data);
+                showNotification(`Игрок ${data.player_name} присоединился`, 'success');
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socket.on('player_left', function(data) {
+                console.log('Player left:', data);
+                showNotification('Игрок вышел из лобби', 'info');
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socket.on('error', function(data) {
+                console.error('Socket error in link page:', data);
+                showNotification(data.message || 'Произошла ошибка', 'error');
+            });
+        }
+        
         function loadLobbyInfo() {
             fetch(`/api/lobby/${lobbyId}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         document.getElementById('lobbyName').textContent = data.lobby.settings.name;
+                        updateLobbyInfo(data.lobby);
                     } else {
                         showNotification('Лобби не найдено', 'error');
                     }
@@ -206,36 +293,26 @@
                 });
         }
         
-        function initSocket() {
-            socket = io();
-            
-            socket.on('connect', function() {
-                console.log('Connected to server');
-                // Автоматически присоединяемся к лобби
-                socket.emit('join_lobby', { lobby_id: lobbyId });
-            });
-            
-            socket.on('lobby_updated', function(data) {
-                console.log('Lobby updated:', data);
-                updateLobbyInfo(data.lobby);
-            });
-            
-            socket.on('game_started', function(data) {
-                showNotification('Игра начинается!', 'success');
-                setTimeout(() => {
-                    window.location.href = `/game/${data.game_id}`;
-                }, 2000);
-            });
-            
-            socket.on('error', function(data) {
-                showNotification(data.message, 'error');
-            });
-        }
-        
         function updateLobbyInfo(lobby) {
             if (lobby) {
+                currentLobby = lobby;
                 document.getElementById('lobbyName').textContent = lobby.settings.name;
-                document.getElementById('joinBtn').disabled = lobby.players.length < lobby.settings.minPlayers;
+                document.getElementById('playersCount').textContent = `${lobby.players.length}/${lobby.settings.maxPlayers}`;
+                
+                const joinBtn = document.getElementById('joinBtn');
+                const statusText = document.getElementById('lobbyStatusText');
+                
+                if (lobby.players.length < lobby.settings.minPlayers) {
+                    statusText.textContent = '⏳ Ожидание игроков';
+                    statusText.style.color = 'var(--warning)';
+                    joinBtn.disabled = true;
+                    joinBtn.title = 'Недостаточно игроков для начала игры';
+                } else {
+                    statusText.textContent = '✅ Готов к запуску';
+                    statusText.style.color = 'var(--positive)';
+                    joinBtn.disabled = false;
+                    joinBtn.title = 'Присоединиться к игре';
+                }
             }
         }
         
