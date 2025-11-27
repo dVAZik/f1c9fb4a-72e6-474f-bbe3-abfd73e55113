@@ -27,10 +27,20 @@ function initSocket() {
             showNotification('Лобби создано! Перенаправление...', 'success');
             window.location.href = data.redirect_url;
         } else {
-            showNotification('Ошибка создания лобби', 'error');
+            showNotification(data.error || 'Ошибка создания лобби', 'error');
         }
     });
-    
+
+    socket.on('join_success', function(data) {
+        console.log('Join success:', data);
+        if (data.success && data.redirect_url) {
+            showNotification('Успешно присоединились! Перенаправление...', 'success');
+            window.location.href = data.redirect_url;
+        } else {
+            showNotification(data.error || 'Ошибка присоединения к лобби', 'error');
+        }
+    });
+        
     socket.on('lobby_updated', function(data) {
         console.log('Lobby updated:', data);
     });
@@ -163,7 +173,7 @@ function loadLobbies() {
             const lobbyList = document.getElementById('lobbyList');
             lobbyList.innerHTML = '';
             
-            if (data.lobbies && data.lobbies.length === 0) {
+            if (!data.lobbies || data.lobbies.length === 0) {
                 lobbyList.innerHTML = `
                     <div class="lobby-card">
                         <div class="lobby-header">
@@ -175,32 +185,39 @@ function loadLobbies() {
                 return;
             }
             
-            if (data.lobbies) {
-                data.lobbies.forEach(lobby => {
-                    const lobbyCard = document.createElement('div');
-                    lobbyCard.className = 'lobby-card';
-                    lobbyCard.onclick = () => joinLobby(lobby.lobby_id);
-                    
-                    lobbyCard.innerHTML = `
-                        <div class="lobby-header">
-                            <div class="lobby-name">${lobby.settings.name}</div>
-                            <div class="lobby-players">${lobby.players.length}/${lobby.settings.maxPlayers}</div>
-                        </div>
-                        <div class="lobby-settings">
-                            ${lobby.settings.gameType === 'throw' ? 'Подкидной' : 'Переводной'} | 
-                            Уровень: ${lobby.settings.botDifficulty} |
-                            ${lobby.settings.isPublic ? 'Публичное' : 'Приватное'}
-                        </div>
-                    `;
-                    
-                    lobbyList.appendChild(lobbyCard);
-                });
-            }
+            data.lobbies.forEach(lobby => {
+                const lobbyCard = document.createElement('div');
+                lobbyCard.className = 'lobby-card';
+                lobbyCard.onclick = () => joinLobby(lobby.lobby_id);
+                
+                lobbyCard.innerHTML = `
+                    <div class="lobby-header">
+                        <div class="lobby-name">${lobby.settings.name}</div>
+                        <div class="lobby-players">${lobby.players.length}/${lobby.settings.maxPlayers}</div>
+                    </div>
+                    <div class="lobby-settings">
+                        ${lobby.settings.gameType === 'throw' ? 'Подкидной' : 'Переводной'} | 
+                        Уровень: ${getBotLevelName(lobby.settings.botDifficulty)} |
+                        ${lobby.settings.isPublic ? 'Публичное' : 'Приватное'}
+                    </div>
+                `;
+                
+                lobbyList.appendChild(lobbyCard);
+            });
         })
         .catch(error => {
             console.error('Error loading lobbies:', error);
             showNotification('Ошибка загрузки лобби', 'error');
         });
+}
+
+function getBotLevelName(level) {
+    const levels = {
+        'easy': 'Легкий',
+        'medium': 'Средний', 
+        'hard': 'Сложный'
+    };
+    return levels[level] || 'Средний';
 }
 
 function refreshLobbies() {
@@ -262,7 +279,21 @@ function findRandomGame() {
         return;
     }
     
-    showNotification('Поиск случайной игры...', 'success');
+    // Загружаем публичные лобби и выбираем случайное
+    fetch('/api/lobbies')
+        .then(response => response.json())
+        .then(data => {
+            if (data.lobbies && data.lobbies.length > 0) {
+                const randomLobby = data.lobbies[Math.floor(Math.random() * data.lobbies.length)];
+                joinLobby(randomLobby.lobby_id);
+            } else {
+                showNotification('Нет доступных игр', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error finding random game:', error);
+            showNotification('Ошибка поиска игры', 'error');
+        });
 }
 
 function showNotification(message, type = 'success') {
