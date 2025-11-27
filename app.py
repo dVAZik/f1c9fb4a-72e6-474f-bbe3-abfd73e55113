@@ -543,9 +543,12 @@ def handle_join_lobby(data):
 def handle_start_game(data):
     try:
         lobby_id = data.get('lobby_id')
+        print(f"Starting game for lobby: {lobby_id}")
+        
         lobby = lobby_manager.get_lobby(lobby_id)
         
         if not lobby:
+            print(f"Lobby {lobby_id} not found")
             emit('error', {'message': 'Лобби не найдено'})
             return
             
@@ -554,34 +557,56 @@ def handle_start_game(data):
             return
         
         game_id = f"game_{random.randint(1000, 9999)}"
-        game = Game(game_id, lobby['settings'])
+        
+        # Преобразуем настройки для игры
+        game_settings = {
+            'max_players': lobby['settings']['maxPlayers'],
+            'min_players': lobby['settings']['minPlayers'],
+            'game_type': lobby['settings']['gameType'],
+            'bot_difficulty': lobby['settings']['botDifficulty']
+        }
+        
+        print(f"Creating game {game_id} with settings: {game_settings}")
+        
+        game = Game(game_id, game_settings)
         
         # Добавляем реальных игроков
         for player_sid in lobby['players']:
             username = f'Player_{player_sid[-4:]}'
             player = Player(player_sid, username)
-            game.add_player(player)
+            if game.add_player(player):
+                print(f"Added player {username} to game")
         
         # Добавляем ботов если нужно
-        while len(game.players) < lobby['settings']['minPlayers']:
-            bot_sid = f"bot_{len(game.players)}"
-            bot = Player(bot_sid, f"Bot_{len(game.players)}", True)
-            game.add_player(bot)
+        players_needed = lobby['settings']['minPlayers'] - len(lobby['players'])
+        print(f"Players needed: {players_needed}")
+        
+        for i in range(players_needed):
+            bot_sid = f"bot_{i+1}_{game_id}"
+            bot_username = f"Bot_{i+1}"
+            bot = Player(bot_sid, bot_username, True)
+            if game.add_player(bot):
+                print(f"Added bot {bot_username} to game")
         
         if game.start_game():
             games[game_id] = game
             lobby_manager.set_game_id(lobby_id, game_id)
+            
+            print(f"Game {game_id} started successfully")
             
             emit('game_started', {
                 'game_id': game_id,
                 'game': game.to_dict()
             }, room=lobby_id)
         else:
+            print("Failed to start game")
             emit('error', {'message': 'Не удалось начать игру'})
             
     except Exception as e:
         print(f"Error starting game: {e}")
-        emit('error', {'message': 'Ошибка при запуске игры'})
+        import traceback
+        traceback.print_exc()
+        emit('error', {'message': f'Ошибка при запуске игры: {str(e)}'})
 
 @socketio.on('chat_message')
 def handle_chat_message(data):
@@ -665,3 +690,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+
