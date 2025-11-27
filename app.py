@@ -10,7 +10,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-12345')
 app.config['DEBUG'] = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, 
+                   cors_allowed_origins="*",
+                   logger=True,
+                   engineio_logger=True)
 
 # База данных в памяти
 games = {}
@@ -355,8 +358,7 @@ class Game:
             'game_state': self.game_state,
             'winner': self.winner,
             'deck_count': len(self.deck.cards),
-            'move_history': self.move_history[-10:],
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'move_history': self.move_history[-10:]
         }
 
 class LobbyManager:
@@ -380,7 +382,7 @@ class LobbyManager:
                 'enableChat': settings.get('enableChat', True)
             },
             'players': [creator_sid],
-            'created_at': datetime.now().isoformat(),
+            'created_at': datetime.now(),
             'game_id': None
         }
         
@@ -449,19 +451,6 @@ class LobbyManager:
 
 lobby_manager = LobbyManager()
 
-def serialize_for_json(obj):
-    """Рекурсивно преобразует объекты для JSON сериализации"""
-    if isinstance(obj, dict):
-        return {k: serialize_for_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [serialize_for_json(item) for item in obj]
-    elif isinstance(obj, datetime):
-        return obj.isoformat()
-    elif hasattr(obj, 'to_dict'):
-        return serialize_for_json(obj.to_dict())
-    else:
-        return obj
-
 # WebSocket события
 @socketio.on('connect')
 def handle_connect():
@@ -476,62 +465,94 @@ def handle_disconnect():
         lobby_manager.leave_lobby(player_sid, lobby_id)
         lobby = lobby_manager.get_lobby(lobby_id)
         if lobby:
-            emit('player_left', serialize_for_json({
+            emit('player_left', {
                 'player_sid': player_sid,
                 'lobby': lobby
-            }), room=lobby_id)
+            }, room=lobby_id)
 
 @socketio.on('create_lobby')
 def handle_create_lobby(data):
-    settings = data.get('settings', {})
-    lobby_id = lobby_manager.create_lobby(request.sid, settings)
-    
-    join_room(lobby_id)
-    
-    emit('lobby_created', serialize_for_json({
-        'success': True,
-        'lobby_id': lobby_id,
-        'redirect_url': f'/link_game/{lobby_id}'
-    }))
-    
-    lobby = lobby_manager.get_lobby(lobby_id)
-    emit('lobby_updated', serialize_for_json({
-        'lobby': lobby
-    }), room=lobby_id)
+    try:
+        settings = data.get('settings', {})
+        lobby_id = lobby_manager.create_lobby(request.sid, settings)
+        
+        join_room(lobby_id)
+        
+        emit('lobby_created', {
+            'success': True,
+            'lobby_id': lobby_id,
+            'redirect_url': f'/link_game/{lobby_id}'
+        })
+        
+        lobby = lobby_manager.get_lobby(lobby_id)
+        emit('lobby_updated', {
+            'lobby': lobby
+        }, room=lobby_id)
+        
+    except Exception as e:
+        print(f"Error creating lobby: {e}")
+        emit('lobby_created', {
+            'success': False,
+            'error': 'Не удалось создать лобби'
+        })
 
 @socketio.on('join_lobby')
 def handle_join_lobby(data):
-    lobby_id = data['lobby_id']
-    player_sid = request.sid
-    
-    if lobby_manager.join_lobby(player_sid, lobby_id):
-        join_room(lobby_id)
-        lobby = lobby_manager.get_lobby(lobby_id)
+    try:
+        lobby_id = data.get('lobby_id')
+        player_sid = request.sid
         
-        emit('lobby_joined', serialize_for_json({
-            'lobby_id': lobby_id,
-            'lobby': lobby
-        }))
+        if not lobby_id:
+            emit('error', {'message': 'ID лобби не указан'})
+            return
         
-        emit('player_joined', serialize_for_json({
-            'player_sid': player_sid,
-            'player_name': f'Player_{player_sid[-4:]}',
-            'lobby': lobby
-        }), room=lobby_id)
-        
-        emit('join_success', serialize_for_json({
-            'lobby_id': lobby_id,
-            'redirect_url': f'/lobby/{lobby_id}'
-        }))
-    else:
-        emit('error', {'message': 'Не удалось присоединиться к лобби'})
+        if lobby_manager.join_lobby(player_sid, lobby_id):
+            join_room(lobby_id)
+            lobby = lobby_manager.get_lobby(lobby_id)
+            
+            emit('lobby_joined', {
+                'lobby_id': lobby_id,
+                'lobby': lobby
+            })
+            
+            emit('player_joined', {
+                'player_sid': player_sid,
+                'player_name': f'Player_{player_sid[-4:]}',
+                'lobby': lobby
+            }, room=lobby_id)
+            
+            emit('join_success', {
+                'success': True,
+                'lobby_id': lobby_id,
+                'redirect_url': f'/lobby/{lobby_id}'
+            })
+        else:
+            emit('join_success', {
+                'success': False,
+                'error': 'Не удалось присоединиться к лобби'
+            })
+            
+    except Exception as e:
+        print(f"Error joining lobby: {e}")
+        emit('join_success', {
+            'success': False,
+            'error': 'Ошибка при присоединении к лобби'
+        })
 
 @socketio.on('start_game')
 def handle_start_game(data):
-    lobby_id = data['lobby_id']
-    lobby = lobby_manager.get_lobby(lobby_id)
-    
-    if lobby and request.sid == lobby['creator_sid']:
+    try:
+        lobby_id = data.get('lobby_id')
+        lobby = lobby_manager.get_lobby(lobby_id)
+        
+        if not lobby:
+            emit('error', {'message': 'Лобби не найдено'})
+            return
+            
+        if request.sid != lobby['creator_sid']:
+            emit('error', {'message': 'Только создатель может начать игру'})
+            return
+        
         game_id = f"game_{random.randint(1000, 9999)}"
         game = Game(game_id, lobby['settings'])
         
@@ -542,7 +563,7 @@ def handle_start_game(data):
             game.add_player(player)
         
         # Добавляем ботов если нужно
-        while len(game.players) < lobby['settings']['min_players']:
+        while len(game.players) < lobby['settings']['minPlayers']:
             bot_sid = f"bot_{len(game.players)}"
             bot = Player(bot_sid, f"Bot_{len(game.players)}", True)
             game.add_player(bot)
@@ -551,56 +572,33 @@ def handle_start_game(data):
             games[game_id] = game
             lobby_manager.set_game_id(lobby_id, game_id)
             
-            emit('game_started', serialize_for_json({
+            emit('game_started', {
                 'game_id': game_id,
                 'game': game.to_dict()
-            }), room=lobby_id)
+            }, room=lobby_id)
+        else:
+            emit('error', {'message': 'Не удалось начать игру'})
+            
+    except Exception as e:
+        print(f"Error starting game: {e}")
+        emit('error', {'message': 'Ошибка при запуске игры'})
 
 @socketio.on('chat_message')
 def handle_chat_message(data):
-    lobby_id = data['lobby_id']
-    message = data['message']
+    lobby_id = data.get('lobby_id')
+    message = data.get('message')
     player_sid = request.sid
     
-    emit('chat_message', serialize_for_json({
-        'player': f'Player_{player_sid[-4:]}',
-        'message': message,
-        'timestamp': datetime.now().isoformat()
-    }), room=lobby_id)
-
-@socketio.on('make_attack')
-def handle_make_attack(data):
-    game_id = data['game_id']
-    card_index = data['card_index']
-    player_sid = request.sid
-    
-    if game_id in games:
-        game = games[game_id]
-        if game.make_attack(player_sid, card_index):
-            emit('game_update', serialize_for_json({
-                'game': game.to_dict()
-            }), room=game_id)
-            
-            # Проверка окончания игры
-            winner = game.check_game_over()
-            if winner:
-                emit('game_over', serialize_for_json({
-                    'winner': winner,
-                    'game': game.to_dict()
-                }), room=game_id)
-
-@socketio.on('make_defense')
-def handle_make_defense(data):
-    game_id = data['game_id']
-    card_index = data['card_index']
-    player_sid = request.sid
-    
-    if game_id in games:
-        game = games[game_id]
-        if game.make_defense(player_sid, card_index):
-            emit('game_update', serialize_for_json({
-                'game': game.to_dict()
-            }), room=game_id)
+    if not lobby_id or not message:
+        return
+        
+    lobby = lobby_manager.get_lobby(lobby_id)
+    if lobby and lobby['settings']['enableChat']:
+        emit('chat_message', {
+            'player': f'Player_{player_sid[-4:]}',
+            'message': message,
+            'timestamp': datetime.now().isoformat()
+        }, room=lobby_id)
 
 # HTTP маршруты
 @app.route('/')
@@ -643,7 +641,7 @@ def get_lobby_info(lobby_id):
 @app.route('/api/game/<game_id>')
 def get_game_state(game_id):
     if game_id in games:
-        return jsonify(serialize_for_json(games[game_id].to_dict()))
+        return jsonify(games[game_id].to_dict())
     return jsonify({'error': 'Game not found'}), 404
 
 @app.route('/api/player/stats')
