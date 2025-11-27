@@ -5,37 +5,52 @@ let currentView = 'main';
 let isConnected = false;
 
 function initSocket() {
-    socket = io();
+    socket = io({
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+    });
     
     socket.on('connect', function() {
-        console.log('Connected to server');
+        console.log('Connected to server, socket ID:', socket.id);
         isConnected = true;
         showNotification('Подключено к серверу', 'success');
         updateConnectionStatus();
     });
     
-    socket.on('disconnect', function() {
-        console.log('Disconnected from server');
+    socket.on('disconnect', function(reason) {
+        console.log('Disconnected from server:', reason);
         isConnected = false;
         showNotification('Отключено от сервера', 'error');
         updateConnectionStatus();
     });
     
+    socket.on('reconnect', function(attemptNumber) {
+        console.log('Reconnected to server after', attemptNumber, 'attempts');
+        isConnected = true;
+        showNotification('Переподключено к серверу', 'success');
+        updateConnectionStatus();
+    });
+    
     socket.on('lobby_created', function(data) {
-        console.log('Lobby created:', data);
+        console.log('Lobby created response:', data);
         if (data.success && data.redirect_url) {
             showNotification('Лобби создано! Перенаправление...', 'success');
-            window.location.href = data.redirect_url;
+            setTimeout(() => {
+                window.location.href = data.redirect_url;
+            }, 500);
         } else {
             showNotification(data.error || 'Ошибка создания лобби', 'error');
         }
     });
 
     socket.on('join_success', function(data) {
-        console.log('Join success:', data);
+        console.log('Join lobby response:', data);
         if (data.success && data.redirect_url) {
-            showNotification('Успешно присоединились! Перенаправление...', 'success');
-            window.location.href = data.redirect_url;
+            showNotification('Успешно присоединились к лобби!', 'success');
+            setTimeout(() => {
+                window.location.href = data.redirect_url;
+            }, 500);
         } else {
             showNotification(data.error || 'Ошибка присоединения к лобби', 'error');
         }
@@ -47,12 +62,20 @@ function initSocket() {
     
     socket.on('game_started', function(data) {
         console.log('Game started:', data);
-        window.location.href = `/game/${data.game_id}`;
+        showNotification('Игра начинается!', 'success');
+        setTimeout(() => {
+            window.location.href = `/game/${data.game_id}`;
+        }, 1000);
     });
     
     socket.on('error', function(data) {
         console.error('Socket error:', data);
-        showNotification(data.message, 'error');
+        showNotification(data.message || 'Произошла ошибка', 'error');
+    });
+    
+    socket.on('connect_error', function(error) {
+        console.error('Connection error:', error);
+        showNotification('Ошибка подключения к серверу', 'error');
     });
 }
 
@@ -62,7 +85,7 @@ function updateConnectionStatus() {
     const buttons = document.querySelectorAll('.nav-btn');
     
     if (isConnected) {
-        statusElement.textContent = '🟢 Подключено';
+        statusElement.textContent = `🟢 Подключено (${socket.id.substring(0, 8)}...)`;
         statusElement.className = 'connection-status connected';
         loadingOverlay.style.display = 'none';
     } else {
@@ -150,6 +173,7 @@ function createLobby() {
     };
     
     console.log('Creating lobby with settings:', settings);
+    console.log('Current socket ID:', socket.id);
     
     socket.emit('create_lobby', { settings: settings });
     
@@ -237,6 +261,8 @@ function joinLobby(lobbyId) {
     }
     
     console.log('Joining lobby:', lobbyId);
+    console.log('Current socket ID:', socket.id);
+    
     socket.emit('join_lobby', { lobby_id: lobbyId });
     showNotification('Присоединение к лобби...', 'success');
 }
