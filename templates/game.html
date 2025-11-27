@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Игра в Дурака</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/game.css">
+</head>
+<body class="background-game background-pattern">
+    <div class="game-container">
+        <div class="game-header">
+            <div class="game-title">
+                <h2>🎮 Игра в Дурака</h2>
+            </div>
+            <div class="game-info">
+                <div class="info-item">
+                    <div class="info-label">КОЗЫРЬ</div>
+                    <div class="info-value trump-suit" id="trumpSuit">♠</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">КОЛОДА</div>
+                    <div class="info-value" id="deckCount">24</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">ХОДИТ</div>
+                    <div class="info-value" id="currentPlayer">Вы</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="game-table">
+            <div class="players-container" id="playersContainer">
+                <!-- Противники будут здесь -->
+            </div>
+            
+            <div class="battle-field" id="battleField">
+                <!-- Карты на столе будут здесь -->
+            </div>
+        </div>
+        
+        <div class="my-hand" id="myHand">
+            <!-- Карты игрока будут здесь -->
+        </div>
+        
+        <div class="game-controls">
+            <button class="control-btn" id="btnAttack" onclick="makeAttack()">Атаковать</button>
+            <button class="control-btn primary" id="btnDefend" onclick="makeDefense()">Отбиться</button>
+            <button class="control-btn" id="btnTake" onclick="takeCards()">Взять</button>
+            <button class="control-btn" id="btnPass" onclick="passTurn()">Пас</button>
+        </div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script src="/static/js/socket.js"></script>
+    <script src="/static/js/game.js"></script>
+</body>
+</html>

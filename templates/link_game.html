@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Присоединиться к игре - Онлайн Дурак</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/lobby.css">
+    <style>
+        .link-container {
+            text-align: center;
+            padding: 30px 20px;
+        }
+        
+        .link-box {
+            background: var(--bg-secondary);
+            padding: 25px;
+            border-radius: 12px;
+            border: 2px solid var(--border);
+            margin: 20px 0;
+        }
+        
+        .link-url {
+            background: var(--bg-tertiary);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-family: monospace;
+            font-size: 1.1em;
+            word-break: break-all;
+            margin: 15px 0;
+            color: var(--text-accent);
+        }
+        
+        .copy-btn {
+            background: var(--positive);
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin: 10px 5px;
+        }
+        
+        .join-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.1em;
+            margin: 10px 5px;
+        }
+        
+        .qr-code {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        
+        .instructions {
+            text-align: left;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .instruction-step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+        
+        .step-number {
+            background: var(--text-accent);
+            color: black;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body class="background-lobby background-pattern">
+    <div class="container">
+        <div class="header">
+            <div class="logo">🔗 ПРИГЛАШЕНИЕ В ИГРУ</div>
+            <div class="subtitle" id="lobbyName">Загрузка...</div>
+        </div>
+        
+        <div class="link-container">
+            <div class="link-box">
+                <h3>🎮 Пригласите друзей в игру</h3>
+                <p>Поделитесь этой ссылкой с друзьями:</p>
+                
+                <div class="link-url" id="gameLink">
+                    Загрузка...
+                </div>
+                
+                <div>
+                    <button class="copy-btn" onclick="copyLink()" id="copyBtn">
+                        📋 Скопировать ссылку
+                    </button>
+                    <button class="join-btn" onclick="joinGame()" id="joinBtn">
+                        🎯 Присоединиться к игре
+                    </button>
+                </div>
+                
+                <!-- Простая имитация QR-кода -->
+                <div class="qr-code">
+                    <div style="text-align: center; color: black;">
+                        <div style="font-size: 3em;">📱</div>
+                        <div style="font-size: 0.8em; margin-top: 10px;">QR-код для мобильных</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <h3>📋 Как присоединиться:</h3>
+                
+                <div class="instruction-step">
+                    <div class="step-number">1</div>
+                    <div>
+                        <strong>Скопируйте ссылку</strong><br>
+                        Отправьте её друзьям через мессенджер или соцсети
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">2</div>
+                    <div>
+                        <strong>Дождитесь игроков</strong><br>
+                        Когда все присоединятся, начните игру
+                    </div>
+                </div>
+                
+                <div class="instruction-step">
+                    <div class="step-number">3</div>
+                    <div>
+                        <strong>Начните игру</strong><br>
+                        Нажмите "Присоединиться к игре" когда будете готовы
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 30px;">
+                <button class="btn btn-secondary" onclick="goHome()">
+                    ← На главную
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        let lobbyId = null;
+        let socket = null;
+        
+        function initPage() {
+            // Получаем ID лобби из URL
+            const pathParts = window.location.pathname.split('/');
+            lobbyId = pathParts[pathParts.length - 1];
+            
+            if (!lobbyId || lobbyId === 'link_game') {
+                showNotification('Неверная ссылка игры', 'error');
+                return;
+            }
+            
+            // Загружаем информацию о лобби
+            loadLobbyInfo();
+            
+            // Инициализируем сокет
+            initSocket();
+            
+            // Обновляем ссылку
+            updateGameLink();
+        }
+        
+        function loadLobbyInfo() {
+            fetch(`/api/lobby/${lobbyId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('lobbyName').textContent = data.lobby.settings.name;
+                    } else {
+                        showNotification('Лобби не найдено', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading lobby info:', error);
+                    showNotification('Ошибка загрузки информации о лобби', 'error');
+                });
+        }
+        
+        function initSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to server');
+                // Автоматически присоединяемся к лобби
+                socket.emit('join_lobby', { lobby_id: lobbyId });
+            });
+            
+            socket.on('lobby_updated', function(data) {
+                console.log('Lobby updated:', data);
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socket.on('game_started', function(data) {
+                showNotification('Игра начинается!', 'success');
+                setTimeout(() => {
+                    window.location.href = `/game/${data.game_id}`;
+                }, 2000);
+            });
+            
+            socket.on('error', function(data) {
+                showNotification(data.message, 'error');
+            });
+        }
+        
+        function updateLobbyInfo(lobby) {
+            if (lobby) {
+                document.getElementById('lobbyName').textContent = lobby.settings.name;
+                document.getElementById('joinBtn').disabled = lobby.players.length < lobby.settings.minPlayers;
+            }
+        }
+        
+        function updateGameLink() {
+            const gameLink = `${window.location.origin}/link_game/${lobbyId}`;
+            document.getElementById('gameLink').textContent = gameLink;
+        }
+        
+        function copyLink() {
+            const gameLink = `${window.location.origin}/link_game/${lobbyId}`;
+            navigator.clipboard.writeText(gameLink).then(function() {
+                const copyBtn = document.getElementById('copyBtn');
+                copyBtn.textContent = '✅ Скопировано!';
+                copyBtn.style.background = 'var(--positive)';
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 Скопировать ссылку';
+                    copyBtn.style.background = '';
+                }, 2000);
+                showNotification('Ссылка скопирована в буфер обмена!', 'success');
+            }).catch(function() {
+                showNotification('Не удалось скопировать ссылку', 'error');
+            });
+        }
+        
+        function joinGame() {
+            // Перенаправляем в основное лобби
+            window.location.href = `/lobby/${lobbyId}`;
+        }
+        
+        function goHome() {
+            window.location.href = '/';
+        }
+        
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            initPage();
+        });
+    </script>
+</body>
+</html>

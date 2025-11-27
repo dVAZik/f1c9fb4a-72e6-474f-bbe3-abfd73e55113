@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Лобби - Онлайн Дурак</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/lobby.css">
+</head>
+<body class="background-lobby background-pattern">
+    <div class="lobby-container">
+        <div class="lobby-header">
+            <div class="lobby-logo">🎮 ЛОББИ ИГРЫ</div>
+            <div class="subtitle" id="lobbyName">Загрузка...</div>
+        </div>
+        
+        <div class="lobby-info">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">ТИП ИГРЫ</div>
+                    <div class="info-value" id="gameType">Подкидной дурак</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">ИГРОКОВ</div>
+                    <div class="info-value" id="playersCount">1/4</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">УРОВЕНЬ БОТОВ</div>
+                    <div class="info-value" id="botLevel">Средний</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">СТАТУС</div>
+                    <div class="info-value">
+                        <span class="status-indicator status-waiting" id="lobbyStatus">
+                            ⏳ Ожидание игроков
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="players-section">
+            <div class="section-title">Игроки в лобби</div>
+            <div class="players-list" id="playersList">
+                <div class="player-card">
+                    <div class="player-info">
+                        <div class="avatar avatar-default">?</div>
+                        <div class="player-details">
+                            <div class="player-name">Загрузка...</div>
+                            <div class="player-status">Подключение...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-section" id="chatSection" style="display: none;">
+            <div class="section-title">Чат лобби</div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-message">
+                    <div class="message-header">
+                        <span class="message-sender">Система</span>
+                        <span class="message-time" id="currentTime"></span>
+                    </div>
+                    <div class="message-text">Добро пожаловать в лобби!</div>
+                </div>
+            </div>
+            <div class="chat-input">
+                <input type="text" class="chat-input-field" id="chatInput" placeholder="Введите сообщение..." onkeypress="handleChatKeypress(event)">
+                <button class="chat-btn" onclick="sendMessage()">Отпр.</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-primary" id="startGameBtn" onclick="startGame()">
+                🎯 Начать игру
+            </button>
+            <button class="btn btn-secondary" onclick="leaveLobby()">
+                🚪 Покинуть лобби
+            </button>
+        </div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script src="/static/js/socket.js"></script>
+    <script>
+        let lobbyId = null;
+        let isCreator = false;
+        let currentPlayers = [];
+        
+        function initLobby() {
+            // Получаем ID лобби из URL
+            const pathParts = window.location.pathname.split('/');
+            lobbyId = pathParts[pathParts.length - 1];
+            
+            // Подписываемся на события лобби
+            socketManager.on('connect', function() {
+                console.log('Connected to lobby');
+                joinLobby();
+                updateCurrentTime();
+                setInterval(updateCurrentTime, 60000);
+            });
+            
+            socketManager.on('lobby_updated', function(data) {
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socketManager.on('player_joined', function(data) {
+                showNotification(`Игрок ${data.player_name} присоединился`, 'success');
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socketManager.on('player_left', function(data) {
+                showNotification(`Игрок вышел из лобби`, 'info');
+                updateLobbyInfo(data.lobby);
+            });
+            
+            socketManager.on('game_started', function(data) {
+                showNotification('Игра начинается!', 'success');
+                setTimeout(() => {
+                    window.location.href = `/game/${data.game_id}`;
+                }, 2000);
+            });
+            
+            socketManager.on('chat_message', function(data) {
+                addChatMessage(data.player, data.message, data.timestamp);
+            });
+            
+            socketManager.on('error', function(data) {
+                showNotification(data.message, 'error');
+            });
+            
+            // Подключаемся к серверу
+            socketManager.connect();
+        }
+        
+        function joinLobby() {
+            socketManager.joinLobby(lobbyId);
+        }
+        
+        function updateLobbyInfo(lobby) {
+            if (!lobby) return;
+            
+            document.getElementById('lobbyName').textContent = lobby.settings.name;
+            document.getElementById('gameType').textContent = 
+                lobby.settings.gameType === 'throw' ? 'Подкидной дурак' : 'Переводной дурак';
+            document.getElementById('playersCount').textContent = 
+                `${lobby.players.length}/${lobby.settings.maxPlayers}`;
+            document.getElementById('botLevel').textContent = 
+                getBotLevelName(lobby.settings.botDifficulty);
+            
+            isCreator = lobby.creator_sid === socketManager.getSocketId();
+            document.getElementById('startGameBtn').disabled = 
+                !isCreator || lobby.players.length < lobby.settings.minPlayers;
+            
+            updatePlayersList(lobby.players, lobby.creator_sid);
+            
+            if (lobby.settings.enableChat) {
+                document.getElementById('chatSection').style.display = 'block';
+            }
+            
+            // Обновляем статус лобби
+            const statusElement = document.getElementById('lobbyStatus');
+            if (lobby.players.length >= lobby.settings.minPlayers) {
+                statusElement.className = 'status-indicator status-ready';
+                statusElement.innerHTML = '✅ Готов к запуску';
+            } else {
+                statusElement.className = 'status-indicator status-waiting';
+                statusElement.innerHTML = '⏳ Ожидание игроков';
+            }
+        }
+        
+        function updatePlayersList(players, creatorSid) {
+            const playersList = document.getElementById('playersList');
+            playersList.innerHTML = '';
+            currentPlayers = players;
+            
+            players.forEach((playerSid, index) => {
+                const playerCard = document.createElement('div');
+                playerCard.className = 'player-card';
+                
+                const isBot = playerSid.startsWith('bot_');
+                const playerName = isBot ? `Бот_${playerSid.split('_')[1]}` : `Игрок_${playerSid.substring(0, 6)}`;
+                const isCurrentPlayer = playerSid === socketManager.getSocketId();
+                const isPlayerCreator = playerSid === creatorSid;
+                
+                playerCard.innerHTML = `
+                    <div class="player-info">
+                        <div class="avatar ${isBot ? 'avatar-bot' : 'avatar-player-' + ((index % 4) + 1)}">
+                            ${isBot ? '🤖' : playerName.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="player-details">
+                            <div class="player-name">
+                                ${playerName}
+                                ${isBot ? '<span class="bot-badge">БОТ</span>' : ''}
+                                ${isPlayerCreator ? '<span class="creator-badge">СОЗДАТЕЛЬ</span>' : ''}
+                                ${isCurrentPlayer ? '<span style="color: var(--positive)">(Вы)</span>' : ''}
+                            </div>
+                            <div class="player-status">
+                                ${getPlayerStatus(playerSid)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                playersList.appendChild(playerCard);
+            });
+        }
+        
+        function getPlayerStatus(playerSid) {
+            if (playerSid.startsWith('bot_')) {
+                return '🤖 Автоигра';
+            } else if (playerSid === socketManager.getSocketId()) {
+                return '🟢 Вы в лобби';
+            } else {
+                return '🟢 В сети';
+            }
+        }
+        
+        function getBotLevelName(level) {
+            const levels = {
+                'easy': 'Легкий',
+                'medium': 'Средний', 
+                'hard': 'Сложный'
+            };
+            return levels[level] || 'Средний';
+        }
+        
+        function startGame() {
+            if (isCreator) {
+                socketManager.startGame(lobbyId);
+            }
+        }
+        
+        function leaveLobby() {
+            if (confirm('Вы уверены, что хотите покинуть лобби?')) {
+                window.location.href = '/';
+            }
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                socketManager.sendChatMessage(lobbyId, message);
+                input.value = '';
+            }
+        }
+        
+        function handleChatKeypress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function addChatMessage(player, message, timestamp) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message';
+            
+            const time = new Date(timestamp).toLocaleTimeString('ru-RU', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            messageElement.innerHTML = `
+                <div class="message-header">
+                    <span class="message-sender">${player}</span>
+                    <span class="message-time">${time}</span>
+                </div>
+                <div class="message-text">${message}</div>
+            `;
+            
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function updateCurrentTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = 
+                now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            setTimeout(() => notification.style.display = 'none', 3000);
+        }
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            initLobby();
+        });
+    </script>
+</body>
+</html>

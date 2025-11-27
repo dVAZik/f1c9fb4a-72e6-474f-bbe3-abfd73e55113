@@ -1,0 +1,297 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #111111;
+    --bg-tertiary: #1a1a1a;
+    --border: #2a2a2a;
+    --text-primary: #ffffff;
+    --text-secondary: #888888;
+    --text-accent: #00ff88;
+    --positive: #00ff88;
+    --negative: #ff4444;
+    --warning: #ffaa00;
+    --info: #0088ff;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+}
+
+.container {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.header {
+    background: var(--bg-secondary);
+    padding: 30px 20px;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    text-align: center;
+}
+
+.logo {
+    font-size: 2.5em;
+    font-weight: 700;
+    margin-bottom: 10px;
+    background: linear-gradient(45deg, #ff6b6b, #ee5a24, #ffa502);
+    -webkit-background-clip: text;
+    -moz-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    -moz-text-fill-color: transparent;
+    color: transparent;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 1.1em;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: var(--bg-secondary);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.4em;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.nav-buttons {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.nav-btn {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 18px;
+    border-radius: 12px;
+    text-align: center;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.2s;
+    cursor: pointer;
+    font-size: 1.1em;
+}
+
+.nav-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--text-accent);
+}
+
+.nav-btn.primary {
+    background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+    border-color: transparent;
+}
+
+.nav-btn.secondary {
+    background: linear-gradient(45deg, #00b894, #00cec9);
+    border-color: transparent;
+}
+
+.section {
+    background: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+}
+
+.section-title {
+    font-size: 1.3em;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: var(--text-accent);
+}
+
+.input-group {
+    margin-bottom: 12px;
+}
+
+.input-label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.input-field, .select-field {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 1em;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox {
+    width: 18px;
+    height: 18px;
+}
+
+.notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    z-index: 1000;
+    display: none;
+}
+
+.notification.success {
+    border-color: var(--positive);
+}
+
+.notification.error {
+    border-color: var(--negative);
+}
+
+.hidden {
+    display: none;
+}
+
+/* SVG иконки через псевдоэлементы */
+.icon::before {
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+}
+
+.icon-attack::before { content: "⚔️"; }
+.icon-defense::before { content: "🛡️"; }
+.icon-trump::before { content: "👑"; }
+.icon-bot::before { content: "🤖"; }
+.icon-player::before { content: "👤"; }
+.icon-creator::before { content: "⭐"; }
+.icon-time::before { content: "⏱️"; }
+.icon-cards::before { content: "🎴"; }
+
+/* Аватары через CSS градиенты */
+.avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: white;
+    font-size: 0.9em;
+}
+
+.avatar-player-1 { background: linear-gradient(45deg, #667eea, #764ba2); }
+.avatar-player-2 { background: linear-gradient(45deg, #f093fb, #f5576c); }
+.avatar-player-3 { background: linear-gradient(45deg, #4facfe, #00f2fe); }
+.avatar-player-4 { background: linear-gradient(45deg, #43e97b, #38f9d7); }
+.avatar-bot { background: linear-gradient(45deg, #ff6b6b, #ee5a24); }
+.avatar-default { background: linear-gradient(45deg, #a8a8a8, #696969); }
+
+/* Фоновые градиенты */
+.background-main {
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #2a2a2a 100%);
+}
+
+.background-game {
+    background: 
+        radial-gradient(circle at 20% 80%, rgba(255, 107, 107, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(46, 204, 113, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(52, 152, 219, 0.05) 0%, transparent 50%),
+        linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+}
+
+.background-lobby {
+    background: 
+        radial-gradient(circle at 10% 20%, rgba(255, 107, 107, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 90% 80%, rgba(241, 196, 15, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, #0a0a0a 0%, #111111 100%);
+}
+
+/* Текстуры через псевдоэлементы */
+.background-pattern::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(circle at 25% 25%, rgba(255,255,255,0.1) 1px, transparent 1px),
+        radial-gradient(circle at 75% 75%, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 50px 50px, 30px 30px;
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Адаптивность */
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .header {
+        padding: 20px 15px;
+    }
+    
+    .logo {
+        font-size: 2em;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    
+    .stat-card {
+        padding: 12px;
+    }
+    
+    .nav-btn {
+        padding: 15px;
+        font-size: 1em;
+    }
+}
