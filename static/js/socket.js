@@ -24,6 +24,10 @@ class SocketManager {
             console.log('WebSocket reconnected');
         });
         
+        this.socket.on('error', (error) => {
+            console.error('WebSocket error:', error);
+        });
+        
         // Автоматическая подписка на зарегистрированные обработчики
         this.eventHandlers.forEach((handlers, event) => {
             handlers.forEach(handler => {
@@ -57,7 +61,10 @@ class SocketManager {
     
     emit(event, data) {
         if (this.socket) {
+            console.log(`Emitting event: ${event}`, data);
             this.socket.emit(event, data);
+        } else {
+            console.error('Socket not connected, cannot emit:', event);
         }
     }
     
@@ -74,7 +81,7 @@ class SocketManager {
     }
     
     createLobby(settings) {
-        this.emit('create_lobby', { settings });
+        this.emit('create_lobby', { settings: settings });
     }
     
     startGame(lobbyId) {
@@ -117,6 +124,10 @@ class SocketManager {
     getSocketId() {
         return this.socket ? this.socket.id : null;
     }
+    
+    isConnected() {
+        return this.socket && this.socket.connected;
+    }
 }
 
 // Глобальный экземпляр менеджера сокетов
@@ -126,12 +137,12 @@ const socketManager = new SocketManager();
 const SocketUtils = {
     // Проверка подключения
     isConnected() {
-        return socketManager.socket && socketManager.socket.connected;
+        return socketManager.isConnected();
     },
     
     // Получение ID сокета
     getSocketId() {
-        return socketManager.socket ? socketManager.socket.id : null;
+        return socketManager.getSocketId();
     },
     
     // Переподключение
