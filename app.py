@@ -127,7 +127,13 @@ class Player:
 class Game:
     def __init__(self, game_id: str, settings: Dict):
         self.game_id = game_id
-        self.settings = settings
+        # Нормализуем настройки
+        self.settings = {
+            'max_players': settings.get('max_players', 4),
+            'min_players': settings.get('min_players', 2),
+            'game_type': settings.get('game_type', 'throw'),
+            'bot_difficulty': settings.get('bot_difficulty', 'medium')
+        }
         self.players: List[Player] = []
         self.deck = Deck()
         self.trump_suit = ''
@@ -503,7 +509,10 @@ def handle_join_lobby(data):
         player_sid = request.sid
         
         if not lobby_id:
-            emit('error', {'message': 'ID лобби не указан'})
+            emit('join_success', {
+                'success': False,
+                'error': 'ID лобби не указан'
+            })
             return
         
         if lobby_manager.join_lobby(player_sid, lobby_id):
@@ -625,6 +634,64 @@ def handle_chat_message(data):
             'timestamp': datetime.now().isoformat()
         }, room=lobby_id)
 
+@socketio.on('make_attack')
+def handle_make_attack(data):
+    game_id = data.get('game_id')
+    card_index = data.get('card_index')
+    player_sid = request.sid
+    
+    if game_id in games:
+        game = games[game_id]
+        if game.make_attack(player_sid, card_index):
+            emit('game_update', {
+                'game': game.to_dict()
+            }, room=game_id)
+            
+            # Проверка окончания игры
+            winner = game.check_game_over()
+            if winner:
+                emit('game_over', {
+                    'winner': winner,
+                    'game': game.to_dict()
+                }, room=game_id)
+
+@socketio.on('make_defense')
+def handle_make_defense(data):
+    game_id = data.get('game_id')
+    card_index = data.get('card_index')
+    player_sid = request.sid
+    
+    if game_id in games:
+        game = games[game_id]
+        if game.make_defense(player_sid, card_index):
+            emit('game_update', {
+                'game': game.to_dict()
+            }, room=game_id)
+
+@socketio.on('take_cards')
+def handle_take_cards(data):
+    game_id = data.get('game_id')
+    player_sid = request.sid
+    
+    if game_id in games:
+        game = games[game_id]
+        if game.take_cards(player_sid):
+            emit('game_update', {
+                'game': game.to_dict()
+            }, room=game_id)
+
+@socketio.on('pass_turn')
+def handle_pass_turn(data):
+    game_id = data.get('game_id')
+    player_sid = request.sid
+    
+    if game_id in games:
+        game = games[game_id]
+        if game.complete_defense():
+            emit('game_update', {
+                'game': game.to_dict()
+            }, room=game_id)
+
 # HTTP маршруты
 @app.route('/')
 def index():
@@ -690,4 +757,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
-
